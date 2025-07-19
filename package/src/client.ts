@@ -47,7 +47,7 @@ type CreateTRPCClientOptions<Router extends AnyRouter> = (
    * A function that transforms the data before transferring it.
    * @see https://trpc.io/docs/data-transformers
    */
-  transformer?: Router['_def']['_config']['transformer'];
+  transformer?: any;
 };
 
 /**
@@ -59,7 +59,7 @@ export function createTRPCClient<Router extends AnyRouter>(
     url: '/trpc'
   }
 ) {
-  if (links) return internalCreateTRPCClient<Router>({ transformer, links });
+  if (links) return internalCreateTRPCClient<Router>({ links });
 
   if (typeof window === 'undefined' && !init) {
     throw new Error(
@@ -68,13 +68,13 @@ export function createTRPCClient<Router extends AnyRouter>(
   }
 
   return internalCreateTRPCClient<Router>({
-    transformer,
     links: [
       httpBatchLink({
         url:
           typeof window === 'undefined' ? `${init.url.origin}${url}` : `${location.origin}${url}`,
-        fetch: typeof window === 'undefined' ? init.fetch : init?.fetch ?? window.fetch,
-        headers
+        fetch: typeof window === 'undefined' ? init.fetch : (init?.fetch ?? window.fetch),
+        headers,
+        ...(transformer && { transformer })
       })
     ]
   });
