@@ -6,7 +6,7 @@ import type {
   inferRouterContext,
   inferRouterError
 } from '@trpc/server';
-import { resolveHTTPResponse, type ResponseMeta } from '@trpc/server/http';
+import { resolveResponse, type ResponseMeta } from '@trpc/server/http';
 import type { TRPCResponse } from '@trpc/server/rpc';
 import { serialize, type CookieSerializeOptions } from 'cookie';
 import type { ValidRoute } from './ValidRoute';
@@ -52,8 +52,8 @@ export function createTRPCHandle<Router extends AnyRouter, URL extends string>({
   responseMeta?: (opts: {
     data: TRPCResponse<unknown, inferRouterError<Router>>[];
     ctx?: inferRouterContext<Router>;
-    paths?: string[];
-    type: ProcedureType;
+    paths: readonly string[];
+    type: ProcedureType | 'unknown';
     errors: TRPCError[];
   }) => ResponseMeta;
 
@@ -72,16 +72,7 @@ export function createTRPCHandle<Router extends AnyRouter, URL extends string>({
 }): Handle {
   return async ({ event, resolve }) => {
     if (event.url.pathname.startsWith(url + '/')) {
-      const request = event.request as Request & {
-        headers: Record<string, string | string[]>;
-      };
-
-      const req = {
-        method: request.method,
-        headers: request.headers,
-        query: event.url.searchParams,
-        body: await request.text()
-      };
+      const request = event.request;
 
       // Using the default `event.setHeaders` and `event.cookies` will not work
       // as the event in not resolved by SvelteKit. Instead, we "proxy" the access
@@ -115,27 +106,26 @@ export function createTRPCHandle<Router extends AnyRouter, URL extends string>({
         originalDeleteCookies(name, options);
       };
 
-      const httpResponse = await resolveHTTPResponse({
+      const httpResponse = await resolveResponse({
         router,
-        req,
+        req: request,
         path: event.url.pathname.substring(url.length + 1),
         createContext: async () => createContext?.(event),
         responseMeta,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onError: onError as any
+        error: onError as any
       });
 
-      const { status, headers, body } = httpResponse as {
-        status: number;
-        headers: Record<string, string>;
-        body: string;
-      };
+      const status = httpResponse.status;
+      const body = await httpResponse.text();
 
       const finalHeaders = new Headers();
 
-      for (const [key, value] of Object.entries(headers)) {
+      // Copy headers from response
+      httpResponse.headers.forEach((value, key) => {
         finalHeaders.set(key, value);
-      }
+      });
+
       for (const [key, value] of Object.entries(headersProxy)) {
         finalHeaders.set(key, value);
       }
